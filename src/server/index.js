@@ -1,12 +1,80 @@
 'use strict';
 
+const users = {
+  'mari@infratec.com': {
+    password: '123',
+    name: 'Marian'
+  },
+  'jo@infratec.com': {
+    password: '123',
+    name: 'José'
+  },
+};
+
+function validateGET(request, reply) {
+
+  const input = request.query;
+
+  if (users[input.user] && users[input.user].password === input.password) {
+    reply({
+      status: 'ok',
+      message: users[input.user].name
+    });
+  } else {
+    reply({
+      status: 'error',
+      message: 'Credenciales inválidas'
+    });
+  }
+}
+
+function validatePOST(request, reply) {
+
+  const input = request.payload;
+
+  if (users[input.user] && users[input.user].password === input.password) {
+    reply({
+      status: 'ok',
+      message: users[input.user].name
+    });
+  } else {
+    reply({
+      status: 'error',
+      message: 'Credenciales inválidas'
+    });
+  }
+}
+
 const Hapi = require('hapi');
+
+const fs = require('fs');
+
+const tls = {
+  key: fs.readFileSync('./server.key'),
+  cert: fs.readFileSync('./server.crt')
+};
 
 const server = new Hapi.Server();
 server.connection(
   {
-    port: process.env.PORT || 3008,
-    labels: 'api',
+    address: '0.0.0.0',
+    tls: tls,
+    port: process.env.PORT || 3447,
+    labels: 'api-https',
+    routes: {
+      files: {
+        relativeTo: __dirname + '/../clients/',
+      },
+      cors: true
+    }
+  }
+);
+
+server.connection(
+  {
+    address: '0.0.0.0',
+    port: process.env.PORT || 3080,
+    labels: 'api-http',
     routes: {
       files: {
         relativeTo: __dirname + '/../clients/',
@@ -93,19 +161,26 @@ server.register(
     );
 
     server.route(
-      {
-        method: 'GET',
-        path: '/api/get',
-        config: {
-          tags: ['api'],
-          description: 'Get current server connections',
-          notes: 'Current server connections.',
-          validate: {}
+      [
+        {
+          method: 'GET',
+          path: '/api/authenticate',
+          config: {
+            tags: ['api'],
+            validate: {}
+          },
+          handler: validateGET
         },
-        handler: function (request, reply) {
-          reply(request.server.plugins['hapi-pub-sub'].getStatus());
+        {
+          method: 'POST',
+          path: '/api/authenticate',
+          config: {
+            tags: ['api'],
+            validate: {}
+          },
+          handler: validatePOST
         }
-      }
+      ]
     );
 
     server.start((error) => {
@@ -114,7 +189,10 @@ server.register(
         throw error;
       }
 
-      server.log('info', 'Hapi Server running at: ' + server.info.uri);
+      server.log('info', 'Hapi Server running at:');
+      for (let connection of server.connections) {
+        console.log(connection.info);
+      }
 
     });
   });
